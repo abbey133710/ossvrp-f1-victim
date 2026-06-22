@@ -1,0 +1,56 @@
+--- # Mirrors gemini-cli .github/workflows/chained_e2e.yml (the HIGH-privilege half).
+# Triggered by workflow_run => runs in the BASE-repo privileged context: repo
+# secrets ARE available here. It blindly checks out the attacker-controlled
+# repo+sha laundered through the artifact and runs its npm lifecycle scripts.
+name: 'Chained E2E'
+
+on:
+  workflow_run:
+    workflows: ['Trigger E2E']
+    types: ['completed']
+
+permissions:
+  contents: read
+
+jobs:
+  download_repo_name:
+    runs-on: ubuntu-latest
+    outputs:
+      repo_name: '${{ steps.out.outputs.repo_name }}'
+      head_sha: '${{ steps.out.outputs.head_sha }}'
+    steps:
+      - name: 'Download the repo_name artifact (from the triggering run)'
+        uses: actions/download-artifact@v4
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          name: repo_name
+          run-id: '${{ github.event.workflow_run.id }}'
+          path: '${{ runner.temp }}/artifacts'
+      - id: out
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs'), path = require('path');
+            const t = '${{ runner.temp }}/artifacts';
+            core.setOutput('repo_name', fs.readFileSync(path.join(t,'repo_name'),'utf8').trim());
+            core.setOutput('head_sha',  fs.readFileSync(path.join(t,'head_sha'),'utf8').trim());
+
+  pwn:
+    needs: download_repo_name
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Checkout the laundered (attacker) repo + sha'
+        uses: actions/checkout@v4
+        with:
+          repository: '${{ needs.download_repo_name.outputs.repo_name }}'
+          ref: '${{ needs.download_repo_name.outputs.head_sha }}'
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+      - name: 'Install dependencies (runs attacker preinstall/postinstall in privileged ctx)'
+        run: npm ci
+      - name: 'Run tests (mirrors real "Run E2E tests" step: secret is in scope here)'
+        env:
+          TEST_SECRET: '${{ secrets.TEST_SECRET }}'
+        run: npm test
